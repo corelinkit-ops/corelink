@@ -1,0 +1,1675 @@
+[
+  {
+    "name": "\ud83d\udd14 01 - Market Open: 6-Agent Trade Panel",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "35 13 * * 1-5"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          300
+        ],
+        "id": "aa90db31-071e-4481-82c9-394ce32399c4",
+        "name": "\u23f0 Market Open 09:35 ET"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/account",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          200,
+          300
+        ],
+        "id": "847f5475-5cac-42c9-a739-039fdbd34415",
+        "name": "Get Account"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/positions",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          400,
+          300
+        ],
+        "id": "7124c2c6-a4c5-40c8-979d-7a59c9cdaa32",
+        "name": "Get Positions"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst account = $('Get Account').first().json;\nconst positions = $('Get Positions').all().map(i => i.json);\nconst watchlist = ($env.WATCHLIST || 'AAPL,MSFT,NVDA,TSLA,AMZN,GOOGL,META,SPY,QQQ').split(',').map(s => s.trim());\nconst heldSymbols = positions.map(p => p.symbol);\nconst available = watchlist.filter(s => !heldSymbols.includes(s));\nconst portfolioValue = parseFloat(account.portfolio_value) || 100000;\nconst cash = parseFloat(account.cash) || 0;\n\nif (positions.length >= 5) {\n  return [{ json: { skip: true, reason: 'Max 5 positions reached', symbols: [] } }];\n}\n\nreturn [{\n  json: {\n    skip: false,\n    account: { portfolio_value: portfolioValue, cash, buying_power: parseFloat(account.buying_power) || 0 },\n    positions,\n    symbols: available.slice(0, 5 - positions.length)\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          300
+        ],
+        "id": "c05ea02b-525a-4b78-9922-12102c1aecea",
+        "name": "Check Market & Build Watchlist"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "e119aa6f-cff4-4f45-baa3-fd815bdb7b83",
+                "leftValue": "={{ $json.skip }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          800,
+          300
+        ],
+        "id": "20bc10a4-35b9-41a7-8a9c-de517c396a2d",
+        "name": "Max Positions?"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1000,
+          150
+        ],
+        "id": "510d0a92-901a-454d-8e05-cf1f1db271bd",
+        "name": "Max Positions - Done"
+      },
+      {
+        "parameters": {
+          "fieldToSplitOut": "symbols",
+          "options": {}
+        },
+        "type": "n8n-nodes-base.splitOut",
+        "typeVersion": 1,
+        "position": [
+          1000,
+          450
+        ],
+        "id": "b35a01e4-4f6c-45ed-8cd7-4d1cd167d23f",
+        "name": "Split Symbols"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/stocks/{{ $json.symbols }}/bars?timeframe=1Day&limit=60&feed=iex",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1200,
+          450
+        ],
+        "id": "41ac5270-fbcb-4d37-9930-2f6509dc8f59",
+        "name": "Get Bars (60d)"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst barsData = $json;\nconst symbol = $('Split Symbols').item.json.symbols || $('Split Symbols').item.json;\nconst bars = barsData.bars?.[symbol] || barsData.bars || [];\n\nif (!bars || bars.length < 20) {\n  return [{ json: { symbol, indicators: null, skip: true, reason: 'Insufficient data' } }];\n}\n\nconst closes = bars.map(b => parseFloat(b.c || b.close));\nconst highs  = bars.map(b => parseFloat(b.h || b.high));\nconst lows   = bars.map(b => parseFloat(b.l || b.low));\nconst vols   = bars.map(b => parseFloat(b.v || b.volume));\n\nconst price  = closes[closes.length - 1];\nconst pct1d  = closes.length >= 2 ? (price / closes[closes.length - 2] - 1) * 100 : 0;\nconst pct5d  = closes.length >= 6 ? (price / closes[closes.length - 6] - 1) * 100 : 0;\n\n// MAs\nconst avg = (arr, n) => arr.slice(-n).reduce((a,b) => a+b, 0) / n;\nconst ma20 = avg(closes, 20);\nconst ma50 = closes.length >= 50 ? avg(closes, 50) : null;\n\n// Volume\nconst volToday = vols[vols.length - 1];\nconst volAvg20 = avg(vols, 20);\nconst volRatio = volAvg20 > 0 ? volToday / volAvg20 : 1;\n\n// RSI\nconst calcRSI = (data, period=14) => {\n  const deltas = data.slice(1).map((v,i) => v - data[i]);\n  let gains = deltas.slice(0, period).filter(d => d > 0).reduce((a,b) => a+b, 0) / period;\n  let losses = deltas.slice(0, period).filter(d => d < 0).map(d => -d).reduce((a,b) => a+b, 0) / period;\n  for (let i = period; i < deltas.length; i++) {\n    const d = deltas[i];\n    gains = (gains * (period-1) + Math.max(d, 0)) / period;\n    losses = (losses * (period-1) + Math.max(-d, 0)) / period;\n  }\n  return losses === 0 ? 100 : 100 - (100 / (1 + gains/losses));\n};\n\n// MACD\nconst ema = (data, period) => {\n  const k = 2 / (period + 1);\n  let e = data[0];\n  for (let i = 1; i < data.length; i++) e = data[i] * k + e * (1 - k);\n  return e;\n};\nconst macdLine  = ema(closes, 12) - ema(closes, 26);\nconst macdSignal = ema(closes.slice(-9), 9);\nconst macdHist  = macdLine - macdSignal;\n\n// BB\nconst bb_mean = avg(closes, 20);\nconst bb_std  = Math.sqrt(closes.slice(-20).reduce((s,v) => s + Math.pow(v - bb_mean, 2), 0) / 20);\nconst bb_upper = bb_mean + 2 * bb_std;\nconst bb_lower = bb_mean - 2 * bb_std;\nconst bb_pct   = bb_std > 0 ? (price - bb_lower) / (bb_upper - bb_lower) : 0.5;\n\nconst rsi = calcRSI(closes);\n\nconst indicators = {\n  price: Math.round(price * 100) / 100,\n  pct_1d: Math.round(pct1d * 100) / 100,\n  pct_5d: Math.round(pct5d * 100) / 100,\n  ma20: Math.round(ma20 * 100) / 100,\n  ma50: ma50 ? Math.round(ma50 * 100) / 100 : null,\n  above_ma20: price > ma20,\n  above_ma50: ma50 ? price > ma50 : null,\n  vol_ratio: Math.round(volRatio * 100) / 100,\n  rsi: Math.round(rsi * 10) / 10,\n  macd: Math.round(macdLine * 1000) / 1000,\n  macd_signal: Math.round(macdSignal * 1000) / 1000,\n  macd_hist: Math.round(macdHist * 1000) / 1000,\n  bb_pct: Math.round(bb_pct * 100) / 100,\n  bb_upper: Math.round(bb_upper * 100) / 100,\n  bb_lower: Math.round(bb_lower * 100) / 100\n};\n\nreturn [{ json: { symbol, indicators, skip: false } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1400,
+          450
+        ],
+        "id": "0f50c02e-860a-4fec-87a7-db85e174df2b",
+        "name": "Compute Technical Indicators"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst { symbol, indicators, skip } = $json;\nif (skip || !indicators) return [{ json: { skip: true } }];\n\nconst account = $('Check Market & Build Watchlist').first().json.account;\nconst positions = $('Check Market & Build Watchlist').first().json.positions;\nconst schema = 'Respond ONLY with valid JSON (no markdown): {\"vote\":\"BUY\"|\"SELL\"|\"HOLD\",\"confidence\":0-100,\"reason\":\"one sentence max 20 words\"}';\n\nconst ind = `Price: $${indicators.price}\n1d: ${indicators.pct_1d}%  5d: ${indicators.pct_5d}%\nRSI(14): ${indicators.rsi}\nMA20: $${indicators.ma20} (${indicators.above_ma20 ? 'ABOVE' : 'BELOW'})\nMA50: ${indicators.ma50 ? '$'+indicators.ma50+' ('+(indicators.above_ma50?'ABOVE':'BELOW')+')' : 'N/A'}\nVolume ratio: ${indicators.vol_ratio}x\nMACD hist: ${indicators.macd_hist}\nBB%: ${indicators.bb_pct} (0=lower band, 1=upper band)`;\n\nconst agents = [\n  {\n    agentName: \"TrendAgent\",\n    systemPrompt: \"You are a disciplined trend-following analyst.\",\n    userPrompt: `Analyze ${symbol}.\n\nINDICATORS:\n${ind}\n\nBUY if price above MA20+MA50 and MA20>MA50 (uptrend). SELL if below both (downtrend). HOLD if mixed.\n\n${schema}`\n  },\n  {\n    agentName: \"TechnicalAgent\",\n    systemPrompt: \"You are a technical analysis expert focusing on RSI, MACD, Bollinger Bands.\",\n    userPrompt: `Analyze ${symbol}.\n\nINDICATORS:\n${ind}\n\nBUY signals: RSI<35, MACD hist turning positive, BB%<0.2. SELL signals: RSI>65, MACD hist negative, BB%>0.8. Need 2 of 3 to agree.\n\n${schema}`\n  },\n  {\n    agentName: \"MomentumAgent\",\n    systemPrompt: \"You are a momentum and volume analyst.\",\n    userPrompt: `Analyze ${symbol}.\n\nINDICATORS:\n${ind}\n\nBUY if price up today AND volume ratio>=1.5. SELL if price down AND volume ratio>=1.5. HOLD if volume weak (<1.0).\n\n${schema}`\n  },\n  {\n    agentName: \"SentimentAgent\",\n    systemPrompt: \"You are a financial news sentiment analyst. You have access to current news.\",\n    userPrompt: `Search for latest news on ${symbol}. Look for earnings, upgrades/downgrades, product news, lawsuits.\n\nCurrent price: $${indicators.price}\n\nBUY: positive catalyst. SELL: negative catalyst. HOLD: no significant news.\n\n${schema}`\n  },\n  {\n    agentName: \"MacroAgent\",\n    systemPrompt: \"You are a macro market strategist. You have access to current market data.\",\n    userPrompt: `Search for: current VIX level, SPY/QQQ trend today, sector performance for ${symbol}.\n\nBUY: risk-on, VIX<20, sector strong. SELL/HOLD: VIX>25, sector weak, major risk event imminent.\n\n${schema}`\n  },\n  {\n    agentName: \"RiskAgent\",\n    systemPrompt: \"You are a strict risk manager with VETO POWER. Reject any trade violating hard rules.\",\n    userPrompt: `PORTFOLIO STATE:\n- Value: $${account.portfolio_value}\n- Cash: $${account.cash}\n- Open positions: ${positions.length}/5\n\nPROPOSED TRADE: ${symbol} @ $${indicators.price}\nEstimated cost: $${Math.min(1000, Math.floor(account.portfolio_value * 0.02 / (indicators.price * 0.03)) * indicators.price)}\n\nHARD RULES (any violation = HOLD/SELL):\n1. Max 5 open positions (currently ${positions.length})\n2. Max $1000 per trade\n3. Cash must cover cost\n4. Stock price must be >= $5\n5. Daily loss limit not breached\n\nBUY only if ALL pass. Confidence 90+ if clearly safe.\n\n${schema}`\n  }\n];\n\nreturn agents.map(a => ({ json: { ...a, symbol, indicators } }));\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1600,
+          450
+        ],
+        "id": "c3165561-486e-436b-8cda-7b02f72b8940",
+        "name": "Prepare 6 Agent Prompts"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.ANTHROPIC_API_KEY }}"
+              },
+              {
+                "name": "anthropic-version",
+                "value": "2023-06-01"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-4-20250514\", max_tokens: 200, system: $json.systemPrompt, messages: [{ role: \"user\", content: $json.userPrompt }] }) }}"
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1800,
+          450
+        ],
+        "id": "1715e9f0-e7a8-4eb2-af68-fa518f947879",
+        "name": "Call Claude Agent"
+      },
+      {
+        "parameters": {
+          "jsCode": "\n// Map responses back to agent names (same order as prompts)\nconst agentNames = ['TrendAgent','TechnicalAgent','MomentumAgent','SentimentAgent','MacroAgent','RiskAgent'];\nreturn $input.all().map((item, i) => ({\n  json: {\n    ...item.json,\n    agentName: agentNames[i] || 'Agent' + i\n  }\n}));\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2000,
+          450
+        ],
+        "id": "2f793c83-e62b-4b00-b89b-631147255402",
+        "name": "Tag Responses with Agent Names"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst items = $input.all();\n\n// Parse each agent's vote\nconst votes = items.map(item => {\n  const agentName = item.json.agentName;\n  const rawContent = item.json.content?.[0]?.text || item.json.content || '{}';\n  const text = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent);\n  try {\n    const clean = text.replace(/```json|```/g, '').trim();\n    const data = JSON.parse(clean);\n    return {\n      agent: agentName,\n      vote: (data.vote || 'HOLD').toUpperCase(),\n      confidence: Math.min(100, Math.max(0, parseInt(data.confidence) || 50)),\n      reason: (data.reason || '').substring(0, 100)\n    };\n  } catch(e) {\n    return { agent: agentName, vote: 'HOLD', confidence: 50, reason: 'Parse error: ' + text.substring(0, 50) };\n  }\n});\n\n// Consensus rules\nconst riskVote    = votes.find(v => v.agent === 'RiskAgent');\nconst riskApproves = riskVote?.vote === 'BUY';\nconst buyVotes    = votes.filter(v => v.vote === 'BUY');\nconst sellVotes   = votes.filter(v => v.vote === 'SELL');\nconst leading     = buyVotes.length >= sellVotes.length ? 'BUY' : 'SELL';\nconst agreeVotes  = votes.filter(v => v.vote === leading);\nconst avgConf     = agreeVotes.reduce((s, v) => s + v.confidence, 0) / (agreeVotes.length || 1);\n\nconst minVotes = parseInt($env.MIN_VOTES_TO_TRADE || '4');\nconst minConf  = parseInt($env.MIN_AGENT_CONFIDENCE || '65');\nconst consensus = agreeVotes.length >= minVotes && avgConf >= minConf && riskApproves && leading === 'BUY';\n\n// Sizing\nconst firstItem   = items[0].json;\nconst price       = firstItem.indicators?.price || 0;\nconst symbol      = firstItem.symbol;\nconst portfolioV  = 100000; // fallback\nconst maxPos      = parseFloat($env.MAX_POSITION_SIZE_USD || '1000');\nconst riskPct     = parseFloat($env.MAX_PORTFOLIO_RISK_PCT || '0.02');\nconst stopPct     = 0.03;\nconst tpPct       = 0.06;\nconst riskDollars = portfolioV * riskPct;\nconst stopDist    = price * stopPct;\nconst qty         = Math.max(1, Math.min(Math.floor(riskDollars / stopDist), Math.floor(maxPos / price)));\nconst stopPrice   = Math.round(price * (1 - stopPct) * 100) / 100;\nconst tpPrice     = Math.round(price * (1 + tpPct) * 100) / 100;\n\nconst voteSummary = votes.map(v => `${v.agent}: ${v.vote} (${v.confidence}%) - ${v.reason}`).join('\\n');\nconsole.log(`\\n=== CONSENSUS: ${symbol} ===\\n${voteSummary}\\nFINAL: ${consensus ? 'BUY' : 'HOLD'} | ${agreeVotes.length}/6 agree | avg conf ${Math.round(avgConf)}`);\n\nreturn [{\n  json: {\n    symbol, price, qty, stopPrice, tpPrice,\n    finalAction: consensus ? 'BUY' : 'HOLD',\n    consensusReached: consensus,\n    votes, avgConfidence: Math.round(avgConf),\n    agreeingCount: agreeVotes.length,\n    riskApproves,\n    reason: consensus\n      ? `${agreeVotes.length}/6 agents voted BUY, avg confidence ${Math.round(avgConf)}`\n      : `No consensus: ${agreeVotes.length}/6 for ${leading}, avg conf ${Math.round(avgConf)}, riskApproves=${riskApproves}`\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2200,
+          450
+        ],
+        "id": "0f7175f7-6d83-45c8-acea-8797cb693fa5",
+        "name": "\ud83e\udde0 Consensus Engine"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "4ff2593a-ecef-4461-b014-8861f8837f02",
+                "leftValue": "={{ $json.consensusReached }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          2400,
+          450
+        ],
+        "id": "2827ff64-226d-431f-bdf0-fe35f35ea870",
+        "name": "Consensus Reached?"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconsole.log(`HOLD: ${$json.symbol} \u2014 ${$json.reason}`);\nreturn $input.all();\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          2600,
+          300
+        ],
+        "id": "cfece4e0-081e-4ef8-b6a9-a473397e361c",
+        "name": "Log HOLD Decision"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/orders",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ symbol: $json.symbol, qty: $json.qty, side: \"buy\", type: \"market\", time_in_force: \"day\" }) }}"
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2600,
+          550
+        ],
+        "id": "80e2702c-c2c9-4801-b114-414a4d390856",
+        "name": "\ud83d\udcc8 Place Buy Order"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/orders",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ symbol: $(\"Consensus Engine\").first().json.symbol, qty: $(\"Consensus Engine\").first().json.qty, side: \"sell\", type: \"stop\", time_in_force: \"gtc\", stop_price: $(\"Consensus Engine\").first().json.stopPrice }) }}"
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          2800,
+          450
+        ],
+        "id": "319415f4-cba4-499c-bd33-a2ce579e6adb",
+        "name": "\ud83d\uded1 Place Stop Loss"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/orders",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ symbol: $(\"Consensus Engine\").first().json.symbol, qty: $(\"Consensus Engine\").first().json.qty, side: \"sell\", type: \"limit\", time_in_force: \"gtc\", limit_price: $(\"Consensus Engine\").first().json.tpPrice }) }}"
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          3000,
+          450
+        ],
+        "id": "3f2c97cf-1a3c-4800-a0a7-e432249a42d3",
+        "name": "\ud83c\udfaf Place Take Profit"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst c = $('Consensus Engine').first().json;\nconst order = $('Place Buy Order').first().json;\nconsole.log(`\\n\u2705 TRADE EXECUTED: BUY ${c.qty}x ${c.symbol} @ ~$${c.price}`);\nconsole.log(`   Stop: $${c.stopPrice} | Target: $${c.tpPrice}`);\nconsole.log(`   Order ID: ${order.id}`);\nconsole.log(`   Votes: ${c.votes.map(v => v.agent+':'+v.vote).join(', ')}`);\nreturn [{ json: { status: 'executed', symbol: c.symbol, qty: c.qty, price: c.price, orderId: order.id, stopPrice: c.stopPrice, tpPrice: c.tpPrice } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          3200,
+          450
+        ],
+        "id": "fc0edd60-83b9-4b11-95ff-53b4fa6596b0",
+        "name": "\u2705 Log Trade Executed"
+      }
+    ],
+    "connections": {
+      "\u23f0 Market Open 09:35 ET": {
+        "main": [
+          [
+            {
+              "node": "Get Account",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Account": {
+        "main": [
+          [
+            {
+              "node": "Get Positions",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Positions": {
+        "main": [
+          [
+            {
+              "node": "Check Market & Build Watchlist",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Check Market & Build Watchlist": {
+        "main": [
+          [
+            {
+              "node": "Max Positions?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Max Positions?": {
+        "main": [
+          [
+            {
+              "node": "Max Positions - Done",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Split Symbols",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Split Symbols": {
+        "main": [
+          [
+            {
+              "node": "Get Bars (60d)",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Bars (60d)": {
+        "main": [
+          [
+            {
+              "node": "Compute Technical Indicators",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Compute Technical Indicators": {
+        "main": [
+          [
+            {
+              "node": "Prepare 6 Agent Prompts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare 6 Agent Prompts": {
+        "main": [
+          [
+            {
+              "node": "Call Claude Agent",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Call Claude Agent": {
+        "main": [
+          [
+            {
+              "node": "Tag Responses with Agent Names",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Tag Responses with Agent Names": {
+        "main": [
+          [
+            {
+              "node": "\ud83e\udde0 Consensus Engine",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "\ud83e\udde0 Consensus Engine": {
+        "main": [
+          [
+            {
+              "node": "Consensus Reached?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Consensus Reached?": {
+        "main": [
+          [
+            {
+              "node": "\ud83d\udcc8 Place Buy Order",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Log HOLD Decision",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "\ud83d\udcc8 Place Buy Order": {
+        "main": [
+          [
+            {
+              "node": "\ud83d\uded1 Place Stop Loss",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "\ud83d\uded1 Place Stop Loss": {
+        "main": [
+          [
+            {
+              "node": "\ud83c\udfaf Place Take Profit",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "\ud83c\udfaf Place Take Profit": {
+        "main": [
+          [
+            {
+              "node": "\u2705 Log Trade Executed",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1"
+    },
+    "meta": {
+      "templateCredsSetupCompleted": true
+    }
+  },
+  {
+    "name": "\ud83c\udf05 02 - Pre-Market Research",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 12 * * 1-5"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          300
+        ],
+        "id": "52d4a3ed-babf-4ba1-9cf6-dd410613610d",
+        "name": "\u23f0 Pre-Market 08:00 ET"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/account",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          200,
+          300
+        ],
+        "id": "62db42fc-310d-4032-a05f-d4f3ce2ee941",
+        "name": "Get Account"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/positions",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          400,
+          300
+        ],
+        "id": "892767bd-64cf-4703-adf0-dca0e06569c2",
+        "name": "Get Positions"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst account = $('Get Account').first().json;\nconst positions = $('Get Positions').all().map(i => i.json);\nconst watchlist = ($env.WATCHLIST || 'AAPL,MSFT,NVDA,TSLA,AMZN').split(',').map(s=>s.trim()).join(', ');\n\nreturn [{\n  json: {\n    systemPrompt: \"You are a pre-market research analyst. Search for current news and macro conditions before answering.\",\n    userPrompt: `Prepare a pre-market brief for today's trading session.\n\nACCOUNT: Portfolio $${parseFloat(account.portfolio_value).toFixed(0)} | Cash $${parseFloat(account.cash).toFixed(0)} | Open positions: ${positions.length}/5\nWATCHLIST: ${watchlist}\n\nTasks:\n1. Search for overnight news on the watchlist symbols\n2. Check macro: futures direction, VIX, any major economic releases today\n3. Rank top 3 symbols most worth watching at open with reasons\n4. Flag any symbols to AVOID today (earnings in 24h, news spike, halt risk)\n\nFormat as a concise pre-market brief under 300 words.`\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          300
+        ],
+        "id": "1f9f236e-a753-409d-84b7-0d5207395e55",
+        "name": "Build Research Prompt"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.ANTHROPIC_API_KEY }}"
+              },
+              {
+                "name": "anthropic-version",
+                "value": "2023-06-01"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-4-20250514\", max_tokens: 1000, system: $json.systemPrompt, messages: [{ role: \"user\", content: $json.userPrompt }], tools: [{ type: \"web_search_20250305\", name: \"web_search\" }] }) }}"
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          800,
+          300
+        ],
+        "id": "56678355-fd28-4396-8603-00ed8faf7d00",
+        "name": "Claude Pre-Market Research"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst content = $json.content || [];\nconst text = content.filter(b => b.type === 'text').map(b => b.text).join(' ');\nconsole.log('\\n\ud83c\udf05 PRE-MARKET BRIEF\\n' + '='.repeat(50));\nconsole.log(text);\nreturn [{ json: { brief: text, timestamp: new Date().toISOString() } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1000,
+          300
+        ],
+        "id": "e8b58a5b-ae11-4c9d-9bd7-aac65628eca2",
+        "name": "Extract & Log Brief"
+      }
+    ],
+    "connections": {
+      "\u23f0 Pre-Market 08:00 ET": {
+        "main": [
+          [
+            {
+              "node": "Get Account",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Account": {
+        "main": [
+          [
+            {
+              "node": "Get Positions",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Positions": {
+        "main": [
+          [
+            {
+              "node": "Build Research Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build Research Prompt": {
+        "main": [
+          [
+            {
+              "node": "Claude Pre-Market Research",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Claude Pre-Market Research": {
+        "main": [
+          [
+            {
+              "node": "Extract & Log Brief",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1"
+    }
+  },
+  {
+    "name": "\u2600\ufe0f 03 - Midday Position Review",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "0 16 * * 1-5"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          300
+        ],
+        "id": "6c6d629f-fbdc-44b0-80bc-e72103d9a848",
+        "name": "\u23f0 Midday 12:00 ET"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/account",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          200,
+          300
+        ],
+        "id": "a8d5fb32-db11-4681-ae8f-8fe1ce03ff49",
+        "name": "Get Account"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/positions",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          400,
+          300
+        ],
+        "id": "bde57168-dad2-4cb7-a8fb-506874b35b8a",
+        "name": "Get Open Positions"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst positions = $input.all().map(i => i.json).filter(p => p.symbol);\nif (positions.length === 0) return [{ json: { noPositions: true } }];\n\nconst schema = 'Respond ONLY with JSON: {\"vote\":\"BUY\"|\"SELL\"|\"HOLD\",\"confidence\":0-100,\"reason\":\"one sentence\"}';\nreturn positions.map(p => ({\n  json: {\n    symbol: p.symbol,\n    side: p.side,\n    unrealized_plpc: parseFloat(p.unrealized_plpc) * 100,\n    systemPrompt: \"You are a midday position reviewer. Search for current news and price action.\",\n    userPrompt: `Review existing LONG position in ${p.symbol}.\nCurrent P&L: ${(parseFloat(p.unrealized_plpc)*100).toFixed(1)}%\nEntry price: $${parseFloat(p.avg_entry_price).toFixed(2)}\nCurrent price: $${parseFloat(p.current_price).toFixed(2)}\n\nSearch for any breaking news or significant price action.\nShould we HOLD this position through end of day, or SELL now?\n\n${schema}`\n  }\n}));\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          300
+        ],
+        "id": "a5856fe7-be4e-4e94-abf4-17eceb267757",
+        "name": "Prepare Position Review Prompts"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "b35f611c-99a7-4d01-a067-3793eee2f788",
+                "leftValue": "={{ $json.noPositions }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          800,
+          300
+        ],
+        "id": "a40f28a4-0e60-4b97-9c6c-33c4b4467671",
+        "name": "Has Positions?"
+      },
+      {
+        "parameters": {},
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          1000,
+          200
+        ],
+        "id": "e64d78d0-df9b-4313-9dab-15e6888214f7",
+        "name": "No Positions - Done"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.ANTHROPIC_API_KEY }}"
+              },
+              {
+                "name": "anthropic-version",
+                "value": "2023-06-01"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-4-20250514\", max_tokens: 200, system: $json.systemPrompt, messages: [{ role: \"user\", content: $json.userPrompt }], tools: [{ type: \"web_search_20250305\", name: \"web_search\" }] }) }}"
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1000,
+          400
+        ],
+        "id": "5bfd1233-f527-4cfc-99fb-d63d9c83f0be",
+        "name": "Review Position with Claude"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst symbol = $input.first().json.symbol || 'UNKNOWN';\nconst content = $json.content || [];\nconst text = content.filter(b => b.type === 'text').map(b => b.text).join(' ');\ntry {\n  const clean = text.replace(/```json|```/g, '').trim();\n  const data = JSON.parse(clean);\n  const shouldSell = data.vote === 'SELL' && data.confidence >= 60;\n  console.log(`Midday review ${symbol}: ${data.vote} (conf=${data.confidence}) - ${data.reason}`);\n  return [{ json: { symbol, vote: data.vote, confidence: data.confidence, reason: data.reason, shouldClose: shouldSell } }];\n} catch(e) {\n  return [{ json: { symbol, vote: 'HOLD', confidence: 50, reason: 'Parse error', shouldClose: false } }];\n}\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1200,
+          400
+        ],
+        "id": "e4997b28-d5c0-4eda-bf08-f2b955f9f58d",
+        "name": "Decide: Hold or Close"
+      },
+      {
+        "parameters": {
+          "conditions": {
+            "options": {
+              "caseSensitive": true,
+              "leftValue": "",
+              "typeValidation": "loose"
+            },
+            "conditions": [
+              {
+                "id": "eac0f3b8-7c07-4755-850f-baa599ac3f63",
+                "leftValue": "={{ $json.shouldClose }}",
+                "rightValue": true,
+                "operator": {
+                  "type": "boolean",
+                  "operation": "equals"
+                }
+              }
+            ],
+            "combinator": "and"
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.if",
+        "typeVersion": 2.2,
+        "position": [
+          1400,
+          400
+        ],
+        "id": "73a259d0-840a-46f4-aa53-d83f1762ae4e",
+        "name": "Should Close?"
+      },
+      {
+        "parameters": {
+          "method": "DELETE",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/positions/{{ $json.symbol }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1600,
+          300
+        ],
+        "id": "02e420e8-cafa-4578-8720-c049871ca39a",
+        "name": "Close Position"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconsole.log(`\ud83d\udd34 Closed position: ${$('Decide: Hold or Close').first().json.symbol}`);\nreturn $input.all();\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1800,
+          300
+        ],
+        "id": "60567929-3603-4415-ac5d-c22cb1dfe75e",
+        "name": "Log Close"
+      }
+    ],
+    "connections": {
+      "\u23f0 Midday 12:00 ET": {
+        "main": [
+          [
+            {
+              "node": "Get Account",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Account": {
+        "main": [
+          [
+            {
+              "node": "Get Open Positions",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Open Positions": {
+        "main": [
+          [
+            {
+              "node": "Prepare Position Review Prompts",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Position Review Prompts": {
+        "main": [
+          [
+            {
+              "node": "Has Positions?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Has Positions?": {
+        "main": [
+          [
+            {
+              "node": "No Positions - Done",
+              "type": "main",
+              "index": 0
+            }
+          ],
+          [
+            {
+              "node": "Review Position with Claude",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Review Position with Claude": {
+        "main": [
+          [
+            {
+              "node": "Decide: Hold or Close",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Decide: Hold or Close": {
+        "main": [
+          [
+            {
+              "node": "Should Close?",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Should Close?": {
+        "main": [
+          [
+            {
+              "node": "Close Position",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Close Position": {
+        "main": [
+          [
+            {
+              "node": "Log Close",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1"
+    }
+  },
+  {
+    "name": "\ud83c\udf06 04 - End of Day: Close & Recap",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "45 19 * * 1-5"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          300
+        ],
+        "id": "92811374-0867-4475-b286-c5c24c39f4fc",
+        "name": "\u23f0 End of Day 15:45 ET"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/account",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          200,
+          300
+        ],
+        "id": "a4119e40-1f15-4c1f-ac4e-a0a86bf375dc",
+        "name": "Get Account"
+      },
+      {
+        "parameters": {
+          "method": "DELETE",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/positions?cancel_orders=true",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          400,
+          300
+        ],
+        "id": "d63efbd2-ceef-4881-acc5-b5ec980da1a4",
+        "name": "Close All Positions"
+      },
+      {
+        "parameters": {
+          "method": "DELETE",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/orders",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          600,
+          300
+        ],
+        "id": "f026a3f9-2adb-445e-a01f-d084b5b06e21",
+        "name": "Cancel All Orders"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/account",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          800,
+          300
+        ],
+        "id": "b9128e26-9f52-4001-83cc-79630aa84923",
+        "name": "Get Final Account State"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst account = $json;\nreturn [{\n  json: {\n    systemPrompt: \"You are a trading performance analyst.\",\n    userPrompt: `Write a concise end-of-day trading recap.\n\nFINAL ACCOUNT STATE:\n- Portfolio value: $${parseFloat(account.portfolio_value).toFixed(2)}\n- Cash: $${parseFloat(account.cash).toFixed(2)}\n- Buying power: $${parseFloat(account.buying_power).toFixed(2)}\n\nWrite a brief EOD summary (under 150 words) covering:\n1. Day summary\n2. What worked / what to improve\n3. Plan for tomorrow\n\nKeep it professional and concise.`\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1000,
+          300
+        ],
+        "id": "679595e1-25ad-4946-9a6c-eca17627f635",
+        "name": "Build EOD Recap Prompt"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.ANTHROPIC_API_KEY }}"
+              },
+              {
+                "name": "anthropic-version",
+                "value": "2023-06-01"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-4-20250514\", max_tokens: 500, system: $json.systemPrompt, messages: [{ role: \"user\", content: $json.userPrompt }] }) }}"
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          1200,
+          300
+        ],
+        "id": "d26f3529-8f56-4177-8446-448788980c44",
+        "name": "Claude EOD Recap"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst content = $json.content || [];\nconst text = content.filter(b => b.type === 'text').map(b => b.text).join(' ');\nconsole.log('\\n\ud83c\udf06 EOD RECAP\\n' + '='.repeat(50) + '\\n' + text);\nreturn [{ json: { recap: text, timestamp: new Date().toISOString() } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1400,
+          300
+        ],
+        "id": "0d2facc6-89e1-4670-9c6d-bc493059da05",
+        "name": "Log EOD Recap"
+      }
+    ],
+    "connections": {
+      "\u23f0 End of Day 15:45 ET": {
+        "main": [
+          [
+            {
+              "node": "Get Account",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Account": {
+        "main": [
+          [
+            {
+              "node": "Close All Positions",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Close All Positions": {
+        "main": [
+          [
+            {
+              "node": "Cancel All Orders",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Cancel All Orders": {
+        "main": [
+          [
+            {
+              "node": "Get Final Account State",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Final Account State": {
+        "main": [
+          [
+            {
+              "node": "Build EOD Recap Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Build EOD Recap Prompt": {
+        "main": [
+          [
+            {
+              "node": "Claude EOD Recap",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Claude EOD Recap": {
+        "main": [
+          [
+            {
+              "node": "Log EOD Recap",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1"
+    }
+  },
+  {
+    "name": "\ud83d\udcc5 05 - Friday Weekly Review",
+    "nodes": [
+      {
+        "parameters": {
+          "rule": {
+            "interval": [
+              {
+                "field": "cronExpression",
+                "expression": "30 20 * * 5"
+              }
+            ]
+          }
+        },
+        "type": "n8n-nodes-base.scheduleTrigger",
+        "typeVersion": 1.2,
+        "position": [
+          0,
+          300
+        ],
+        "id": "9bcaa494-5ee7-4cd7-9ad7-78f787f5dce2",
+        "name": "\u23f0 Friday Weekly Review 16:30 ET"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/account",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          200,
+          300
+        ],
+        "id": "b715e25d-4c16-4550-98a6-519177bd5a27",
+        "name": "Get Account"
+      },
+      {
+        "parameters": {
+          "method": "GET",
+          "url": "={{ $env.ALPACA_BASE_URL }}/v2/orders?status=closed&limit=50&direction=desc",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "APCA-API-KEY-ID",
+                "value": "={{ $env.ALPACA_API_KEY }}"
+              },
+              {
+                "name": "APCA-API-SECRET-KEY",
+                "value": "={{ $env.ALPACA_SECRET_KEY }}"
+              }
+            ]
+          },
+          "options": {}
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          400,
+          300
+        ],
+        "id": "c397875b-0572-4aa4-b21b-c02a98dbcfeb",
+        "name": "Get Order History"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst account = $('Get Account').first().json;\nconst orders = $input.all().map(i => i.json);\nconst portfolioValue = parseFloat(account.portfolio_value).toFixed(2);\n\nconst orderSummary = orders.slice(0, 20).map(o =>\n  `${o.symbol}: ${o.side} ${o.qty} @ $${parseFloat(o.filled_avg_price||0).toFixed(2)} (${o.status})`\n).join('\\n');\n\nreturn [{\n  json: {\n    systemPrompt: \"You are a senior trading strategist conducting a weekly performance review. Search for relevant market context.\",\n    userPrompt: `Conduct a weekly trading performance review.\n\nACCOUNT: $${portfolioValue}\n\nRECENT ORDERS (last 20):\n${orderSummary || 'No orders this week'}\n\nSTRATEGY RULES:\n- 6-agent consensus system (4/6 votes + RiskAgent approval + 65% avg confidence)\n- 3% stop-loss, 6% take-profit on all trades\n- Max $1000 per position, max 5 positions\n- Daily loss limit: $500\n\nSearch for: overall market performance this week, sector trends, upcoming events next week.\n\nWrite a structured weekly review (under 400 words) covering:\n1. Week P&L summary\n2. What the agent consensus got right/wrong\n3. Market conditions assessment\n4. Strategy adjustments to consider\n5. Top watchlist symbols for next week\n6. Key risk events next week to watch`\n  }\n}];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          600,
+          300
+        ],
+        "id": "04b20c83-48c1-44ed-90c8-50a4032019fa",
+        "name": "Prepare Weekly Review Prompt"
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://api.anthropic.com/v1/messages",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "x-api-key",
+                "value": "={{ $env.ANTHROPIC_API_KEY }}"
+              },
+              {
+                "name": "anthropic-version",
+                "value": "2023-06-01"
+              },
+              {
+                "name": "content-type",
+                "value": "application/json"
+              }
+            ]
+          },
+          "options": {},
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-4-20250514\", max_tokens: 1200, system: $json.systemPrompt, messages: [{ role: \"user\", content: $json.userPrompt }], tools: [{ type: \"web_search_20250305\", name: \"web_search\" }] }) }}"
+        },
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [
+          800,
+          300
+        ],
+        "id": "28dd0c99-27b8-48fc-b7dc-3efcce5e8e6a",
+        "name": "Claude Weekly Review"
+      },
+      {
+        "parameters": {
+          "jsCode": "\nconst content = $json.content || [];\nconst text = content.filter(b => b.type === 'text').map(b => b.text).join(' ');\nconsole.log('\\n\ud83d\udcc5 WEEKLY REVIEW\\n' + '='.repeat(50) + '\\n' + text);\nreturn [{ json: { review: text, timestamp: new Date().toISOString() } }];\n"
+        },
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          1000,
+          300
+        ],
+        "id": "21042c17-1f33-45e6-8518-7188470cc8c0",
+        "name": "Log Weekly Review"
+      }
+    ],
+    "connections": {
+      "\u23f0 Friday Weekly Review 16:30 ET": {
+        "main": [
+          [
+            {
+              "node": "Get Account",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Account": {
+        "main": [
+          [
+            {
+              "node": "Get Order History",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Get Order History": {
+        "main": [
+          [
+            {
+              "node": "Prepare Weekly Review Prompt",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Prepare Weekly Review Prompt": {
+        "main": [
+          [
+            {
+              "node": "Claude Weekly Review",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Claude Weekly Review": {
+        "main": [
+          [
+            {
+              "node": "Log Weekly Review",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "active": false,
+    "settings": {
+      "executionOrder": "v1"
+    }
+  }
+]
